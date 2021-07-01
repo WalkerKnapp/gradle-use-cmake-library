@@ -12,6 +12,7 @@ import java.io.File;
 
 @CacheableTask
 public class CMakeInstallTask extends DefaultTask {
+    private String buildType;
     private final DirectoryProperty cmakeFiles;
 
     public CMakeInstallTask() {
@@ -26,8 +27,18 @@ public class CMakeInstallTask extends DefaultTask {
             execSpec.setWorkingDir(getOutputDirectory());
             execSpec.commandLine(cmakeExecutable,
                     "--install", this.cmakeFiles.get().getAsFile().getAbsolutePath(),
+                    "--config", this.buildType,
                     "--prefix", this.getOutputDirectory().getAbsolutePath());
         });
+    }
+
+    @Input
+    public String getBuildType() {
+        return buildType;
+    }
+
+    public void setBuildType(String buildType) {
+        this.buildType = buildType;
     }
 
     @OutputFiles

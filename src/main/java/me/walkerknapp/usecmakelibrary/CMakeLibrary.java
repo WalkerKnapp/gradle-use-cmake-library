@@ -100,18 +100,6 @@ public class CMakeLibrary implements Plugin<Project> {
 
                     String variantName = StringUtils.uncapitalize(String.join("", variantNameToken));
 
-                    AttributeContainer runtimeAttributes = attributesFactory.mutable();
-                    runtimeAttributes.attribute(Usage.USAGE_ATTRIBUTE, runtimeUsage);
-                    addCommonAttributes(buildType, targetMachine, runtimeAttributes);
-                    runtimeAttributes.attribute(LINKAGE_ATTRIBUTE, linkage);
-                    DefaultUsageContext runtimeUsageContext = new DefaultUsageContext(variantName + "Runtime", runtimeAttributes);
-
-                    AttributeContainer linkAttributes = attributesFactory.mutable();
-                    linkAttributes.attribute(Usage.USAGE_ATTRIBUTE, linkUsage);
-                    addCommonAttributes(buildType, targetMachine, linkAttributes);
-                    linkAttributes.attribute(LINKAGE_ATTRIBUTE, linkage);
-                    DefaultUsageContext linkUsageContext = new DefaultUsageContext(variantName + "Link", linkAttributes);
-
                     ToolChainSelector.Result<CppPlatform> result = toolChainSelector.select(CppPlatform.class, new DefaultCppPlatform(targetMachine));
 
                     if(!result.getPlatformToolProvider().isAvailable()) {
@@ -130,6 +118,7 @@ public class CMakeLibrary implements Plugin<Project> {
                     });
 
                     TaskProvider<CMakeInstallTask> installTask = project.getTasks().register("cmakeInstall" + StringUtils.capitalize(variantName), CMakeInstallTask.class, task -> {
+                        task.setBuildType(buildType.getName());
                         task.getCmakeFiles().set(project.getLayout().dir(generateTask.map(CMakeGenerateTask::getOutputDirectory)));
                         task.dependsOn(buildTask);
                     });
@@ -137,23 +126,24 @@ public class CMakeLibrary implements Plugin<Project> {
                     Configuration linkElements = project.getConfigurations().create(StringUtils.uncapitalize(variantName) + "LinkElements");
                     linkElements.setCanBeResolved(false);
                     linkElements.setCanBeConsumed(true);
-                    for (Attribute<?> attribute : linkAttributes.keySet()) {
-                        linkElements.getAttributes().attribute((Attribute<Object>) attribute, linkAttributes.getAttribute(attribute));
-                    }
+                    linkElements.getAttributes().attribute(Usage.USAGE_ATTRIBUTE, linkUsage);
+                    addCommonAttributes(buildType, targetMachine, linkElements.getAttributes());
+                    linkElements.getAttributes().attribute(LINKAGE_ATTRIBUTE, linkage);
                     linkElements.getOutgoing().artifact(installTask.flatMap(CMakeInstallTask::getLibDirectory), arti -> arti.builtBy(installTask));
 
                     Configuration runtimeElements = project.getConfigurations().create(StringUtils.uncapitalize(variantName) + "RuntimeElements");
                     runtimeElements.setCanBeResolved(false);
                     runtimeElements.setCanBeConsumed(true);
-                    for (Attribute<?> attribute : runtimeAttributes.keySet()) {
-                        runtimeAttributes.getAttributes().attribute((Attribute<Object>) attribute, runtimeAttributes.getAttribute(attribute));
-                    }
+                    runtimeElements.getAttributes().attribute(Usage.USAGE_ATTRIBUTE, runtimeUsage);
+                    addCommonAttributes(buildType, targetMachine, runtimeElements.getAttributes());
+                    runtimeElements.getAttributes().attribute(LINKAGE_ATTRIBUTE, linkage);
                     runtimeElements.getOutgoing().artifact(installTask.flatMap(CMakeInstallTask::getBinDirectory), arti -> arti.builtBy(installTask));
 
                     Configuration includeElements = project.getConfigurations().create(StringUtils.uncapitalize(variantName) + "ApiElements");
                     includeElements.setCanBeResolved(false);
                     includeElements.setCanBeConsumed(true);
                     includeElements.getAttributes().attribute(Usage.USAGE_ATTRIBUTE, project.getObjects().named(Usage.class, Usage.C_PLUS_PLUS_API));
+                    addCommonAttributes(buildType, targetMachine, includeElements.getAttributes());
                     includeElements.getAttributes().attribute(ArtifactAttributes.ARTIFACT_FORMAT, ArtifactTypeDefinition.DIRECTORY_TYPE);
                     includeElements.getOutgoing().artifact(installTask.flatMap(CMakeInstallTask::getIncludeDirectory), arti -> arti.builtBy(installTask));
                 }

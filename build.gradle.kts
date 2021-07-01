@@ -5,7 +5,7 @@ plugins {
 }
 
 group = "me.walkerknapp"
-version = "0.0.1"
+version = "0.0.2"
 
 gradlePlugin {
     plugins {
@@ -26,6 +26,15 @@ pluginBundle {
 
 repositories {
     mavenCentral()
+}
+
+publishing {
+    repositories {
+        maven {
+            name = "localPR"
+            url = uri("../gradle-local-plugins")
+        }
+    }
 }
 
 dependencies {
