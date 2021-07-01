@@ -7,14 +7,26 @@ import org.apache.commons.lang3.StringUtils;
 import org.gradle.api.Named;
 import org.gradle.api.Plugin;
 import org.gradle.api.Project;
+import org.gradle.api.Transformer;
 import org.gradle.api.artifacts.Configuration;
+import org.gradle.api.artifacts.PublishArtifact;
 import org.gradle.api.artifacts.type.ArtifactTypeDefinition;
 import org.gradle.api.attributes.Attribute;
 import org.gradle.api.attributes.AttributeContainer;
 import org.gradle.api.attributes.Usage;
+import org.gradle.api.file.Directory;
 import org.gradle.api.internal.artifacts.ArtifactAttributes;
 import org.gradle.api.internal.attributes.ImmutableAttributesFactory;
+import org.gradle.api.internal.provider.AbstractMinimalProvider;
+import org.gradle.api.internal.provider.CollectionProviderInternal;
+import org.gradle.api.internal.provider.ProviderInternal;
+import org.gradle.api.internal.provider.ValueSanitizer;
+import org.gradle.api.internal.tasks.DefaultTaskDependency;
+import org.gradle.api.internal.tasks.TaskDependencyResolveContext;
+import org.gradle.api.provider.Provider;
+import org.gradle.api.tasks.TaskDependency;
 import org.gradle.api.tasks.TaskProvider;
+import org.gradle.internal.DisplayName;
 import org.gradle.language.cpp.CppPlatform;
 import org.gradle.language.cpp.internal.DefaultCppPlatform;
 import org.gradle.language.cpp.internal.DefaultUsageContext;
@@ -25,8 +37,11 @@ import org.gradle.language.nativeplatform.internal.BuildType;
 import org.gradle.nativeplatform.*;
 import org.gradle.nativeplatform.toolchain.internal.plugins.StandardToolChainsPlugin;
 
+import javax.annotation.Nullable;
 import javax.inject.Inject;
+import java.io.File;
 import java.util.*;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import static org.gradle.language.cpp.CppBinary.*;
@@ -129,7 +144,7 @@ public class CMakeLibrary implements Plugin<Project> {
                     linkElements.getAttributes().attribute(Usage.USAGE_ATTRIBUTE, linkUsage);
                     addCommonAttributes(buildType, targetMachine, linkElements.getAttributes());
                     linkElements.getAttributes().attribute(LINKAGE_ATTRIBUTE, linkage);
-                    linkElements.getOutgoing().artifact(installTask.flatMap(CMakeInstallTask::getLibDirectory), arti -> arti.builtBy(installTask));
+                    linkElements.getOutgoing().getArtifacts().addAllLater(new InstallArtifactSetProvider(installTask, CMakeInstallTask::getLibDirectory, Arrays.asList(".a", ".lib")));
 
                     Configuration runtimeElements = project.getConfigurations().create(StringUtils.uncapitalize(variantName) + "RuntimeElements");
                     runtimeElements.setCanBeResolved(false);
@@ -137,7 +152,7 @@ public class CMakeLibrary implements Plugin<Project> {
                     runtimeElements.getAttributes().attribute(Usage.USAGE_ATTRIBUTE, runtimeUsage);
                     addCommonAttributes(buildType, targetMachine, runtimeElements.getAttributes());
                     runtimeElements.getAttributes().attribute(LINKAGE_ATTRIBUTE, linkage);
-                    runtimeElements.getOutgoing().artifact(installTask.flatMap(CMakeInstallTask::getBinDirectory), arti -> arti.builtBy(installTask));
+                    runtimeElements.getOutgoing().getArtifacts().addAllLater(new InstallArtifactSetProvider(installTask, CMakeInstallTask::getBinDirectory, Arrays.asList(".so", ".dll")));
 
                     Configuration includeElements = project.getConfigurations().create(StringUtils.uncapitalize(variantName) + "ApiElements");
                     includeElements.setCanBeResolved(false);
@@ -149,5 +164,97 @@ public class CMakeLibrary implements Plugin<Project> {
                 }
             }
         });
+    }
+
+    public class DirectFileArtifact implements PublishArtifact {
+        private final File f;
+        private final TaskProvider<CMakeInstallTask> installTask;
+
+        public DirectFileArtifact(File f, TaskProvider<CMakeInstallTask> installTask) {
+            this.f = f;
+            this.installTask = installTask;
+        }
+
+        @Override
+        public String getName() {
+            return f.getName();
+        }
+
+        @Override
+        public String getExtension() {
+            return f.getName().substring(f.getName().lastIndexOf('.'));
+        }
+
+        @Override
+        public String getType() {
+            return f.getName().substring(f.getName().lastIndexOf('.'));
+        }
+
+        @Nullable
+        @Override
+        public String getClassifier() {
+            return null;
+        }
+
+        @Override
+        public File getFile() {
+            return f;
+        }
+
+        @Nullable
+        @Override
+        public Date getDate() {
+            return null;
+        }
+
+        @Override
+        public TaskDependency getBuildDependencies() {
+            DefaultTaskDependency dtd = new DefaultTaskDependency();
+            dtd.add(installTask);
+            return dtd;
+        }
+    }
+
+    public class InstallArtifactSetProvider extends AbstractMinimalProvider<Set<PublishArtifact>> implements CollectionProviderInternal<PublishArtifact, Set<PublishArtifact>> {
+        private final TaskProvider<CMakeInstallTask> installTask;
+        private final Function<CMakeInstallTask, Provider<Directory>> directoryMapper;
+        private final Collection<String> extensions;
+
+        public InstallArtifactSetProvider(TaskProvider<CMakeInstallTask> installTask, Function<CMakeInstallTask, Provider<Directory>> directoryMapper, Collection<String> extensions) {
+            this.installTask = installTask;
+            this.directoryMapper = directoryMapper;
+            this.extensions = extensions;
+        }
+
+        @Override
+        protected Value<? extends Set<PublishArtifact>> calculateOwnValue(ValueConsumer consumer) {
+            Set<PublishArtifact> artifacts = installTask.flatMap(directoryMapper::apply)
+                    .map(dir -> dir.getAsFileTree().filter(f -> extensions.stream().anyMatch(ext -> f.getName().endsWith(ext))))
+                    .get()
+                    .getFiles().stream()
+                    .map(f -> new DirectFileArtifact(f, installTask))
+                    .collect(Collectors.toSet());
+
+            return Value.of(artifacts);
+        }
+
+        @Override
+        public Class<? extends PublishArtifact> getElementType() {
+            return PublishArtifact.class;
+        }
+
+        @Override
+        public int size() {
+            return installTask.flatMap(directoryMapper::apply)
+                    .map(dir -> dir.getAsFileTree()
+                            .filter(f -> extensions.stream().anyMatch(ext -> f.getName().endsWith(ext)))
+                            .getFiles().size()).get();
+        }
+
+        @Nullable
+        @Override
+        public Class<Set<PublishArtifact>> getType() {
+            return null;
+        }
     }
 }
