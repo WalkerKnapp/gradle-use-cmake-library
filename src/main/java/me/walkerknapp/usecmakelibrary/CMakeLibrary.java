@@ -148,6 +148,16 @@ public class CMakeLibrary implements Plugin<Project> {
                     Path configBuildPath;
                     CodeModel.Configuration configuration =  null;
 
+                    // TODO: No matter what the build type we're going to present to gradle is,
+                    //  we're going to have cmake build a release binary. This is because cmake
+                    //  treats "debug" binaries in a way that is unsafe for the gradle "debug"
+                    //  linker to consume. Gradle only ever links against the release version
+                    //  of the C Run-time Library, but cmake debug binaries need to be linked
+                    //  against the release C Run-time Library always.
+                    //  See https://stackoverflow.com/a/42801504.
+                    String buildTypeString = "RELEASE";
+                    // String buildTypeString = buildType.getName();
+
                     if (buildType == BuildType.RELEASE) {
                         configInstance = initialInstance;
                         needsRegen = false;
@@ -173,16 +183,6 @@ public class CMakeLibrary implements Plugin<Project> {
                         // This future will spin until the next time the instance is generated
                         CompletableFuture<CodeModel> configCodeModelFuture = configInstance.queueRequest(CFIQuery.CODE_MODEL);
 
-                        // TODO: No matter what the build type we're going to present to gradle is,
-                        //  we're going to have cmake build a release binary. This is because cmake
-                        //  treats "debug" binaries in a way that is unsafe for the gradle "debug"
-                        //  linker to consume. Gradle only ever links against the release version
-                        //  of the C Run-time Library, but cmake debug binaries need to be linked
-                        //  against the release C Run-time Library always.
-                        //  See https://stackoverflow.com/a/42801504.
-                        String buildTypeString = "RELEASE";
-                        // String buildTypeString = buildType.getName();
-
                         CMakeGenerator.generateCmakeFiles(project, configBuildPath, buildTypeString,
                                 ((DefaultCppPlatform) result.getTargetPlatform()).getNativePlatform(),
                                 result.getToolChain());
@@ -204,12 +204,12 @@ public class CMakeLibrary implements Plugin<Project> {
                     String variantName = StringUtils.uncapitalize(String.join("", variantNameToken));
 
                     TaskProvider<CMakeBuildTask> buildTask = project.getTasks().register("cmakeBuild" + StringUtils.capitalize(variantName), CMakeBuildTask.class, task -> {
-                        task.setBuildType(buildType.getName());
+                        task.setBuildType(buildTypeString);
                         task.getCmakeFiles().set(project.file(configBuildPath));
                     });
 
                     TaskProvider<CMakeInstallTask> installTask = project.getTasks().register("cmakeInstall" + StringUtils.capitalize(variantName), CMakeInstallTask.class, task -> {
-                        task.setBuildType(buildType.getName());
+                        task.setBuildType(buildTypeString);
                         task.getCmakeFiles().set(project.file(configBuildPath));
                         task.dependsOn(buildTask);
                     });
