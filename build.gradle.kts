@@ -1,11 +1,11 @@
 plugins {
+    id("com.gradle.plugin-publish") version "0.15.0"
     `java-gradle-plugin`
     `maven-publish`
-    id("com.gradle.plugin-publish") version "0.14.0"
 }
 
 group = "me.walkerknapp"
-version = "0.0.2"
+version = "0.0.4"
 
 gradlePlugin {
     plugins {
@@ -28,16 +28,10 @@ repositories {
     mavenCentral()
 }
 
-publishing {
-    repositories {
-        maven {
-            name = "localPR"
-            url = uri("../gradle-local-plugins")
-        }
-    }
-}
-
 dependencies {
+    implementation(gradleApi())
     implementation("org.apache.commons:commons-lang3:3+")
+    implementation("me.walkerknapp:cfi-java:0.0.2")
+    implementation("com.dslplatform:dsl-json-java8:1+")
 }
 
