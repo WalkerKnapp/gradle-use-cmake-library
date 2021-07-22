@@ -2,7 +2,6 @@ package me.walkerknapp.usecmakelibrary.util;
 
 import org.gradle.api.Action;
 import org.gradle.api.Project;
-import org.gradle.language.base.internal.compile.Compiler;
 import org.gradle.language.base.internal.compile.VersionAwareCompiler;
 import org.gradle.nativeplatform.internal.LinkerSpec;
 import org.gradle.nativeplatform.platform.NativePlatform;
@@ -58,6 +57,9 @@ public class CMakeGenerator {
 
             CommandLineToolSearchResult cCompilerRes = platformToolProvider.locateTool(ToolType.C_COMPILER);
             CommandLineToolSearchResult cppCompilerRes = platformToolProvider.locateTool(ToolType.CPP_COMPILER);
+            CommandLineToolSearchResult arCompilerRes = platformToolProvider.locateTool(ToolType.STATIC_LIB_ARCHIVER);
+            CommandLineToolSearchResult objcopyCompilerRes = platformToolProvider.locateTool(ToolType.SYMBOL_EXTRACTOR);
+            CommandLineToolSearchResult stripCompilerRes = platformToolProvider.locateTool(ToolType.STRIPPER);
 
             if (!cCompilerRes.isAvailable()) {
                 throw new AssertionError("Could not find C compiler for platform " + nativePlatform.getDisplayName()
@@ -67,9 +69,24 @@ public class CMakeGenerator {
                 throw new AssertionError("Could not find C++ compiler for platform " + nativePlatform.getDisplayName()
                         + " using toolchain " + nativeToolChain.getDisplayName());
             }
+            if (!arCompilerRes.isAvailable()) {
+                throw new AssertionError("Could not find AR for platform " + nativePlatform.getDisplayName()
+                        + " using toolchain " + nativeToolChain.getDisplayName());
+            }
+            if (!objcopyCompilerRes.isAvailable()) {
+                throw new AssertionError("Could not find objcopy for platform " + nativePlatform.getDisplayName()
+                        + " using toolchain " + nativeToolChain.getDisplayName());
+            }
+            if (!stripCompilerRes.isAvailable()) {
+                throw new AssertionError("Could not find strip for platform " + nativePlatform.getDisplayName()
+                        + " using toolchain " + nativeToolChain.getDisplayName());
+            }
 
             System.out.println("Found c compiler: " + cCompilerRes.getTool().getAbsolutePath());
             System.out.println("Found c++ compiler: " + cppCompilerRes.getTool().getAbsolutePath());
+            System.out.println("Found ar tool: " + arCompilerRes.getTool().getAbsolutePath());
+            System.out.println("Found objcopy tool: " + objcopyCompilerRes.getTool().getAbsolutePath());
+            System.out.println("Found strip tool: " + stripCompilerRes.getTool().getAbsolutePath());
 
             // Here's the hard part, we need to locate a compatible make
             String makeExecutable = System.getenv().getOrDefault("MAKE_EXECUTABLE", "make");
@@ -143,10 +160,17 @@ public class CMakeGenerator {
                         "-DCMAKE_SYSTEM_NAME=" + finalCmakeSystemName,
                         "-DCMAKE_SYSTEM_VERSION=1",
                         "-DCMAKE_MAKE_PROGRAM=" + makeExecutable.replace('\\', '/'),
+                        "-DCMAKE_AR=" + arCompilerRes.getTool().getAbsolutePath().replace('\\', '/'),
                         "-DCMAKE_C_COMPILER=" + cCompilerRes.getTool().getAbsolutePath().replace('\\', '/'),
                         "-DCMAKE_C_FLAGS=" + formatToolArgs(cppToolContext.get().getArgAction()).replace('\\', '/'),
+                        "-DCMAKE_C_COMPILER_AR=" + arCompilerRes.getTool().getAbsolutePath().replace('\\', '/'),
+                        "-DCMAKE_C_ARCHIVE_FINISH=<CMAKE_AR> -s <TARGET>",
                         "-DCMAKE_CXX_COMPILER=" + cppCompilerRes.getTool().getAbsolutePath().replace('\\', '/'),
                         "-DCMAKE_CXX_FLAGS=" + formatToolArgs(cToolContext.get().getArgAction()).replace('\\', '/'),
+                        "-DCMAKE_CXX_COMPILER_AR=" + arCompilerRes.getTool().getAbsolutePath().replace('\\', '/'),
+                        "-DCMAKE_CXX_ARCHIVE_FINISH=<CMAKE_AR> -s <TARGET>",
+                        "-DCMAKE_OBJCOPY=" + objcopyCompilerRes.getTool().getAbsolutePath().replace('\\', '/'),
+                        "-DCMAKE_STRIP=" + stripCompilerRes.getTool().getAbsolutePath().replace('\\', '/'),
                         "-DCMAKE_BUILD_TYPE=" + capitalize(buildType),
                         "--no-warn-unused-cli", project.getRootDir().getAbsolutePath().replace('\\', '/'));
             });
