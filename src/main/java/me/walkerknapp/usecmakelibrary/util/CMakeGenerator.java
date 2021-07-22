@@ -1,5 +1,6 @@
 package me.walkerknapp.usecmakelibrary.util;
 
+import me.walkerknapp.usecmakelibrary.CMakeExtension;
 import org.gradle.api.Action;
 import org.gradle.api.Project;
 import org.gradle.language.base.internal.compile.VersionAwareCompiler;
@@ -26,7 +27,7 @@ public class CMakeGenerator {
         return s.substring(0, 1).toUpperCase() + s.substring(1);
     }
 
-    public static void generateCmakeFiles(Project project, Path outputDirectory, String buildType, NativePlatform targetPlatform, NativeToolChain toolChain) {
+    public static void generateCmakeFiles(Project project, CMakeExtension extension, Path outputDirectory, String buildType, NativePlatform targetPlatform, NativeToolChain toolChain) {
         String cmakeExecutable = System.getenv().getOrDefault("CMAKE_EXECUTABLE", "cmake");
 
         NativeToolChainInternal nativeToolChain = (NativeToolChainInternal) toolChain;
@@ -152,27 +153,32 @@ public class CMakeGenerator {
                 cmakeSystemName = "Darwin";
             }
 
-            String finalCmakeSystemName = cmakeSystemName;
+            ArrayList<String> cli = new ArrayList<>(List.of(cmakeExecutable,
+                    "-G", makefileGenerator,
+                    "-DCMAKE_SYSTEM_NAME=" + cmakeSystemName,
+                    "-DCMAKE_SYSTEM_VERSION=1",
+                    "-DCMAKE_MAKE_PROGRAM=" + makeExecutable.replace('\\', '/'),
+                    "-DCMAKE_AR=" + arCompilerRes.getTool().getAbsolutePath().replace('\\', '/'),
+                    "-DCMAKE_C_COMPILER=" + cCompilerRes.getTool().getAbsolutePath().replace('\\', '/'),
+                    "-DCMAKE_C_FLAGS=" + formatToolArgs(cppToolContext.get().getArgAction()).replace('\\', '/'),
+                    "-DCMAKE_C_COMPILER_AR=" + arCompilerRes.getTool().getAbsolutePath().replace('\\', '/'),
+                    "-DCMAKE_C_ARCHIVE_FINISH=<CMAKE_AR> -s <TARGET>",
+                    "-DCMAKE_CXX_COMPILER=" + cppCompilerRes.getTool().getAbsolutePath().replace('\\', '/'),
+                    "-DCMAKE_CXX_FLAGS=" + formatToolArgs(cToolContext.get().getArgAction()).replace('\\', '/'),
+                    "-DCMAKE_CXX_COMPILER_AR=" + arCompilerRes.getTool().getAbsolutePath().replace('\\', '/'),
+                    "-DCMAKE_CXX_ARCHIVE_FINISH=<CMAKE_AR> -s <TARGET>",
+                    "-DCMAKE_OBJCOPY=" + objcopyCompilerRes.getTool().getAbsolutePath().replace('\\', '/'),
+                    "-DCMAKE_STRIP=" + stripCompilerRes.getTool().getAbsolutePath().replace('\\', '/'),
+                    "-DCMAKE_BUILD_TYPE=" + capitalize(buildType)));
+
+            extension.getArguments().execute(cli);
+
+            cli.addAll(List.of("--no-warn-unused-cli",
+                    project.getRootDir().getAbsolutePath().replace('\\', '/')));
+
             project.exec(execSpec -> {
                 execSpec.setWorkingDir(outputDirectory);
-                execSpec.commandLine(cmakeExecutable,
-                        "-G", makefileGenerator,
-                        "-DCMAKE_SYSTEM_NAME=" + finalCmakeSystemName,
-                        "-DCMAKE_SYSTEM_VERSION=1",
-                        "-DCMAKE_MAKE_PROGRAM=" + makeExecutable.replace('\\', '/'),
-                        "-DCMAKE_AR=" + arCompilerRes.getTool().getAbsolutePath().replace('\\', '/'),
-                        "-DCMAKE_C_COMPILER=" + cCompilerRes.getTool().getAbsolutePath().replace('\\', '/'),
-                        "-DCMAKE_C_FLAGS=" + formatToolArgs(cppToolContext.get().getArgAction()).replace('\\', '/'),
-                        "-DCMAKE_C_COMPILER_AR=" + arCompilerRes.getTool().getAbsolutePath().replace('\\', '/'),
-                        "-DCMAKE_C_ARCHIVE_FINISH=<CMAKE_AR> -s <TARGET>",
-                        "-DCMAKE_CXX_COMPILER=" + cppCompilerRes.getTool().getAbsolutePath().replace('\\', '/'),
-                        "-DCMAKE_CXX_FLAGS=" + formatToolArgs(cToolContext.get().getArgAction()).replace('\\', '/'),
-                        "-DCMAKE_CXX_COMPILER_AR=" + arCompilerRes.getTool().getAbsolutePath().replace('\\', '/'),
-                        "-DCMAKE_CXX_ARCHIVE_FINISH=<CMAKE_AR> -s <TARGET>",
-                        "-DCMAKE_OBJCOPY=" + objcopyCompilerRes.getTool().getAbsolutePath().replace('\\', '/'),
-                        "-DCMAKE_STRIP=" + stripCompilerRes.getTool().getAbsolutePath().replace('\\', '/'),
-                        "-DCMAKE_BUILD_TYPE=" + capitalize(buildType),
-                        "--no-warn-unused-cli", project.getRootDir().getAbsolutePath().replace('\\', '/'));
+                execSpec.commandLine(cli);
             });
         }
     }

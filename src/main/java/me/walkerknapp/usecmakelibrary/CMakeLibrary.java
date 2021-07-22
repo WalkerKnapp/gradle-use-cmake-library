@@ -131,7 +131,8 @@ public class CMakeLibrary implements Plugin<Project> {
                 // This future will spin until the next time the instance is generated
                 CompletableFuture<CodeModel> codeModelFuture = initialInstance.queueRequest(CFIQuery.CODE_MODEL);
 
-                CMakeGenerator.generateCmakeFiles(project, initialBuildPath, "RELEASE",
+                CMakeGenerator.generateCmakeFiles(project, cMakeExtension,
+                        initialBuildPath, "RELEASE",
                         ((DefaultCppPlatform) result.getTargetPlatform()).getNativePlatform(),
                         result.getToolChain());
 
@@ -183,7 +184,8 @@ public class CMakeLibrary implements Plugin<Project> {
                         // This future will spin until the next time the instance is generated
                         CompletableFuture<CodeModel> configCodeModelFuture = configInstance.queueRequest(CFIQuery.CODE_MODEL);
 
-                        CMakeGenerator.generateCmakeFiles(project, configBuildPath, buildTypeString,
+                        CMakeGenerator.generateCmakeFiles(project, cMakeExtension,
+                                configBuildPath, buildTypeString,
                                 ((DefaultCppPlatform) result.getTargetPlatform()).getNativePlatform(),
                                 result.getToolChain());
 
