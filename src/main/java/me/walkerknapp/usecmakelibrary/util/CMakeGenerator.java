@@ -132,7 +132,7 @@ public class CMakeGenerator {
             targetPlatform.getOperatingSystem().getName().toLowerCase().contains("nux")) {
                 cmakeSystemName = "Linux";
             } else {
-                cmakeSystemName = "Apple";
+                cmakeSystemName = "Darwin";
             }
 
             String finalCmakeSystemName = cmakeSystemName;
